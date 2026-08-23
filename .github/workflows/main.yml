@@ -1,0 +1,5 @@
+- name: Send Discord notification
+  run: |
+    curl -X POST ${{ secrets.DISCORD_WEBHOOK_URL }} \
+      -H 'Content-Type: application/json' \
+      -d '{"content":"Stock analysis completed!"}'
