@@ -10,66 +10,63 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
       
-      - run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt
-      
-      - name: Run analysis
+      - name: Create .env file
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: python main.py > output.txt 2>&1 || true
+        run: |
+          cat > .env << 'EOF'
+          STOCK_LIST=600519,300750,002594
+          SCHEDULE_ENABLED=false
+          RUN_IMMEDIATELY=true
+          MARKET_REVIEW_ENABLED=true
+          DAILY_MARKET_CONTEXT_ENABLED=true
+          OPENAI_API_KEY=${{ env.OPENAI_API_KEY }}
+          GENERATION_BACKEND=litellm
+          GENERATION_FALLBACK_BACKEND=litellm
+          DATABASE_PATH=./data/stock_analysis.db
+          LOG_DIR=./logs
+          LOG_LEVEL=INFO
+          MAX_WORKERS=3
+          DEBUG=false
+          DISCORD_WEBHOOK_URL=${{ secrets.DISCORD_WEBHOOK_URL }}
+          SAVE_CONTEXT_SNAPSHOT=true
+          BACKTEST_ENABLED=false
+          EOF
       
-      - name: Discord Success
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Run stock analysis
+        run: python main.py 2>&1 | tee analysis_output.txt
+      
+      - name: Send Discord Success
         if: success()
         env:
           WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
           curl -X POST "$WEBHOOK_URL" \
             -H 'Content-Type: application/json' \
-            -d "{\"content\":\"✅ Analysis Complete\"}"
-
-      - name: Run stock analysis
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          python main.py 2>&1 | tee analysis_output.txt
-          echo "Exit code: $?"
-
-      - name: Check if file exists
-        run: |
-          if [ -f analysis_output.txt ]; then
-            echo "✅ File created successfully"
-            ls -lh analysis_output.txt
-          else
-            echo "❌ File not found"
-            echo "Current directory contents:"
-            ls -la
-          fi
-
-      - name: Upload analysis results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: analysis-results
-          path: analysis_output.txt
-          retention-days: 7
+            -d '{"content":"✅ Stock Analysis Complete","embeds":[{"title":"Success","color":5763719}]}'
       
-      - name: Discord Failure
+      - name: Send Discord Failure
         if: failure()
         env:
           WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
           curl -X POST "$WEBHOOK_URL" \
             -H 'Content-Type: application/json' \
-            -d "{\"content\":\"❌ Analysis Failed\"}"
+            -d '{"content":"❌ Stock Analysis Failed","embeds":[{"title":"Error","color":15158332}]}'
       
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: results
-          path: output.txt
+          name: analysis-results
+          path: analysis_output.txt
           retention-days: 7
