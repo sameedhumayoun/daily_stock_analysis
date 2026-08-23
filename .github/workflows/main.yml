@@ -1,5 +1,74 @@
-- name: Send Discord notification
-  run: |
-    curl -X POST ${{ secrets.DISCORD_WEBHOOK_URL }} \
-      -H 'Content-Type: application/json' \
-      -d '{"content":"Stock analysis completed!"}'
+name: Daily Stock Analysis
+
+on:
+  schedule:
+    - cron: '0 9 * * *'  # Run daily at 9 AM UTC
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  stock-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run stock analysis
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: python main.py > analysis_output.txt 2>&1
+
+      - name: Send Discord notification - Success
+        if: success()
+        run: |
+          curl -X POST ${{ secrets.DISCORD_WEBHOOK_URL }} \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "content": "✅ Daily Stock Analysis Completed Successfully",
+              "embeds": [{
+                "title": "Stock Analysis Report",
+                "description": "The daily stock analysis has been completed and insights are ready.",
+                "color": 5763719,
+                "fields": [
+                  {"name": "Status", "value": "✅ Success", "inline": true},
+                  {"name": "Timestamp", "value": "'$(date)'", "inline": true}
+                ],
+                "footer": {"text": "Daily Stock Analysis System"}
+              }]
+            }'
+
+      - name: Send Discord notification - Failure
+        if: failure()
+        run: |
+          curl -X POST ${{ secrets.DISCORD_WEBHOOK_URL }} \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "content": "❌ Daily Stock Analysis Failed",
+              "embeds": [{
+                "title": "Stock Analysis Report",
+                "description": "The daily stock analysis encountered an error.",
+                "color": 15158332,
+                "fields": [
+                  {"name": "Status", "value": "❌ Failed", "inline": true},
+                  {"name": "Timestamp", "value": "'$(date)'", "inline": true}
+                ],
+                "footer": {"text": "Daily Stock Analysis System"}
+              }]
+            }'
+
+      - name: Upload analysis results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: analysis-results
+          path: analysis_output.txt
+          retention-days: 7
