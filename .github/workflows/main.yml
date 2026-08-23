@@ -31,6 +31,32 @@ jobs:
           curl -X POST "$WEBHOOK_URL" \
             -H 'Content-Type: application/json' \
             -d "{\"content\":\"✅ Analysis Complete\"}"
+
+      - name: Run stock analysis
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          python main.py 2>&1 | tee analysis_output.txt
+          echo "Exit code: $?"
+
+      - name: Check if file exists
+        run: |
+          if [ -f analysis_output.txt ]; then
+            echo "✅ File created successfully"
+            ls -lh analysis_output.txt
+          else
+            echo "❌ File not found"
+            echo "Current directory contents:"
+            ls -la
+          fi
+
+      - name: Upload analysis results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: analysis-results
+          path: analysis_output.txt
+          retention-days: 7
       
       - name: Discord Failure
         if: failure()
